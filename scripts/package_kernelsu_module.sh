@@ -31,8 +31,9 @@ command -v unzip >/dev/null 2>&1 || {
 }
 
 mkdir -p "$stage_dir/kmod" "$output_dir"
+rm -f "$output_file"
 cp "$module_dir/module.prop" "$stage_dir/module.prop"
-cp "$module_dir/profile.sh" "$stage_dir/profile.sh"
+cp "$module_dir/profile.conf" "$stage_dir/profile.conf"
 cp "$module_dir/service.sh" "$stage_dir/service.sh"
 cp "$module_dir/uninstall.sh" "$stage_dir/uninstall.sh"
 cp "$module_file" "$stage_dir/kmod/K100PM_CHG_RUNTIME.ko"
@@ -40,7 +41,7 @@ chmod 0755 "$stage_dir/service.sh" "$stage_dir/uninstall.sh"
 
 (
 	cd "$stage_dir"
-	zip -q -r "$output_file" module.prop profile.sh service.sh uninstall.sh kmod
+	zip -q -r "$output_file" module.prop profile.conf service.sh uninstall.sh kmod
 )
 unzip -t "$output_file" >/dev/null
 printf '%s\n' "output: $output_file"

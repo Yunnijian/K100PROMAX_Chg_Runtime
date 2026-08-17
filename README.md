@@ -14,7 +14,7 @@
 
 ## 运行行为
 
-默认 KernelSU profile 打开以下开关：
+默认 `profile.conf` 打开以下开关：
 
 | 开关 | 默认值 | 作用 |
 | --- | ---: | --- |
@@ -53,7 +53,7 @@ software: 2550 mV
 | Buck | `platform_class_buckchg_ops_set_ichg` | Buck 充电电流 |
 | Buck | `platform_class_buckchg_ops_set_term_volt` | CV/目标电压 |
 | 快充策略 | `mca_quick_charge_*_voter_cb` | 分流、CP、FFC、PPS 和热控电流 |
-| 充电 FG | `strategy_fg_ops_get_temp`、`strategy_fg_ops_get_thermal_temp` | 读取原始策略温度并按 profile 钳制输出 |
+| 充电 FG | `strategy_fg_ops_get_temp`、`strategy_fg_ops_get_thermal_temp` | 读取原始策略温度并按 `profile.conf` 钳制输出 |
 | 关机策略 | `fg_update_status`、`mca_battery_shutdown_update_vcutoff_para` | FG vcutoff 字段 |
 
 ## 安装
@@ -69,7 +69,7 @@ su -c 'cat /sys/module/k100pm_chg_runtime/parameters/{armed,boost,pps,thermal,te
 su -c 'cat /sys/module/k100pm_chg_runtime/parameters/{ichg_hits,cv_hits,curve_hits,pps_hits,thermal_hits,temperature_hits,cutoff_hits}'
 ```
 
-可选的持久配置文件为 `/data/adb/k100pm_chg_runtime.conf`。文件中的变量会覆盖模块自带的 `kernelsu/profile.sh`：
+模块配置文件为安装目录下的 `/data/adb/modules/k100pm_chg_runtime/profile.conf`。它使用简单的 `KEY=value` 语法，由 `service.sh` 在加载 KO 前读取：
 
 ```sh
 K100PM_ARMED=1
@@ -85,7 +85,7 @@ K100PM_CUTOFF_DELAY_MV=2600
 K100PM_CUTOFF_SW_MV=2550
 ```
 
-`K100PM_TEMPERATURE_CEILING` 使用 `0.1°C`，因此 `360` 表示 `36.0°C`。
+`K100PM_TEMPERATURE_CEILING` 使用 `0.1°C`，因此 `360` 表示 `36.0°C`。修改配置后重启模块或重启设备使其重新加载。
 
 ## 从源码构建
 
@@ -126,7 +126,7 @@ dist/K100PM_CHG_RUNTIME-KernelSU.zip
 
 ```text
 src/                    KO 源码
-kernelsu/               KernelSU 模块脚本和 profile
+kernelsu/               KernelSU 模块脚本和 profile.conf
 scripts/                构建、CRC 校验和打包脚本
 kheaders/               目标内核头文件
 abi/                    目标内核 ABI 基线

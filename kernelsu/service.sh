@@ -3,12 +3,11 @@
 MODDIR=${0%/*}
 KMOD="$MODDIR/kmod/K100PM_CHG_RUNTIME.ko"
 MODNAME=k100pm_chg_runtime
-DEFAULT_PROFILE="$MODDIR/profile.sh"
-USER_PROFILE=/data/adb/k100pm_chg_runtime.conf
+DEFAULT_PROFILE="$MODDIR/profile.conf"
 TAG=K100PM_CHG_RUNTIME
 
+rm -f "$MODDIR/profile.sh" /data/adb/k100pm_chg_runtime.conf
 [ -r "$DEFAULT_PROFILE" ] && . "$DEFAULT_PROFILE"
-[ -r "$USER_PROFILE" ] && . "$USER_PROFILE"
 
 [ -d "/sys/module/$MODNAME" ] && exit 0
 [ -f "$KMOD" ] || exit 1
