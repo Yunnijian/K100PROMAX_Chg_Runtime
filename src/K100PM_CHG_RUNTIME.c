@@ -96,8 +96,52 @@ static u32 k100pm_apply_temperature_current(u32 value)
 
 	if (band == 2)
 		return value;
-	if (band == 1 && (value == 0u || value >= 3880u))
-		return 4140u;
+	if (band == 1) {
+		switch (value) {
+		case 0u:
+		case 500u:
+		case 1000u:
+		case 1200u:
+		case 1445u:
+		case 1500u:
+		case 2000u:
+		case 2107u:
+		case 2400u:
+		case 2500u:
+		case 2958u:
+		case 3000u:
+		case 3500u:
+		case 3880u:
+		case 4000u:
+		case 4315u:
+		case 4500u:
+		case 5000u:
+		case 6000u:
+		case 6904u:
+		case 7000u:
+		case 8000u:
+		case 8630u:
+		case 9000u:
+		case 10000u:
+		case 10356u:
+		case 11000u:
+		case 12000u:
+		case 12400u:
+		case 12945u:
+		case 13500u:
+		case 15000u:
+		case 17500u:
+		case 17600u:
+		case 18300u:
+		case 18400u:
+		case 19400u:
+		case 20500u:
+		case 22000u:
+			return 4140u;
+		default:
+			return value;
+		}
+	}
 	return value;
 }
 
