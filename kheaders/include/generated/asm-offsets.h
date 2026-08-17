@@ -1,0 +1,126 @@
+#ifndef __ASM_OFFSETS_H__
+#define __ASM_OFFSETS_H__
+
+
+#define TSK_ACTIVE_MM 1680 
+
+#define TSK_TI_CPU 40 
+#define TSK_TI_FLAGS 0 
+#define TSK_TI_PREEMPT 16 
+#define TSK_TI_TTBR0 8 
+#define TSK_TI_SCS_BASE 24 
+#define TSK_TI_SCS_SP 32 
+#define TSK_STACK 56 
+#define TSK_STACK_CANARY 1808 
+
+#define THREAD_CPU_CONTEXT 3488 
+#define THREAD_SCTLR_USER 5136 
+#define THREAD_KEYS_USER 5032 
+#define THREAD_KEYS_KERNEL 5112 
+#define THREAD_MTE_CTRL 5128 
+
+#define S_X0 0 
+#define S_X2 16 
+#define S_X4 32 
+#define S_X6 48 
+#define S_X8 64 
+#define S_X10 80 
+#define S_X12 96 
+#define S_X14 112 
+#define S_X16 128 
+#define S_X18 144 
+#define S_X20 160 
+#define S_X22 176 
+#define S_X24 192 
+#define S_X26 208 
+#define S_X28 224 
+#define S_FP 232 
+#define S_LR 240 
+#define S_SP 248 
+#define S_PC 256 
+#define S_PSTATE 264 
+#define S_SYSCALLNO 280 
+#define S_SDEI_TTBR1 288 
+#define S_PMR_SAVE 296 
+#define S_STACKFRAME 304 
+#define PT_REGS_SIZE 336 
+
+#define COMPAT_SIGFRAME_REGS_OFFSET 32 
+#define COMPAT_RT_SIGFRAME_REGS_OFFSET 160 
+
+#define MM_CONTEXT_ID 968 
+
+#define VMA_VM_MM 16 
+#define VMA_VM_FLAGS 32 
+
+#define VM_EXEC 4 
+
+#define PAGE_SZ 4096 
+
+#define DMA_TO_DEVICE 1 
+#define DMA_FROM_DEVICE 2 
+
+#define PREEMPT_DISABLE_OFFSET 1 
+
+#define CPU_BOOT_TASK 0 
+
+#define FTR_OVR_VAL_OFFSET 0 
+#define FTR_OVR_MASK_OFFSET 8 
+
+#define VCPU_CONTEXT 256 
+#define VCPU_FAULT_DISR 3432 
+#define VCPU_HCR_EL2 3384 
+#define CPU_USER_PT_REGS 0 
+#define CPU_ELR_EL2 1728 
+#define CPU_RGSR_EL1 1568 
+#define CPU_GCR_EL1 1576 
+#define CPU_APIAKEYLO_EL1 1488 
+#define CPU_APIBKEYLO_EL1 1504 
+#define CPU_APDAKEYLO_EL1 1520 
+#define CPU_APDBKEYLO_EL1 1536 
+#define CPU_APGAKEYLO_EL1 1552 
+#define HOST_CONTEXT_VCPU 3088 
+#define HOST_DATA_CONTEXT 0 
+#define NVHE_INIT_MAIR_EL2 0 
+#define NVHE_INIT_TCR_EL2 8 
+#define NVHE_INIT_TPIDR_EL2 16 
+#define NVHE_INIT_STACK_HYP_VA 24 
+#define NVHE_INIT_PGD_PA 40 
+#define NVHE_INIT_HCR_EL2 48 
+#define NVHE_INIT_HFGWTR_EL2 56 
+#define NVHE_INIT_VTTBR 64 
+#define NVHE_INIT_VTCR 72 
+#define NVHE_INIT_TMP 80 
+#define CPU_CTX_SP 112 
+#define MPIDR_HASH_MASK 0 
+#define MPIDR_HASH_SHIFTS 8 
+#define SLEEP_STACK_DATA_SYSTEM_REGS 0 
+#define SLEEP_STACK_DATA_CALLEE_REGS 128 
+#define ARM_SMCCC_RES_X0_OFFS 0 
+#define ARM_SMCCC_RES_X2_OFFS 16 
+#define ARM_SMCCC_QUIRK_ID_OFFS 0 
+#define ARM_SMCCC_QUIRK_STATE_OFFS 8 
+#define ARM_SMCCC_1_2_REGS_X0_OFFS 0 
+#define ARM_SMCCC_1_2_REGS_X2_OFFS 16 
+#define ARM_SMCCC_1_2_REGS_X4_OFFS 32 
+#define ARM_SMCCC_1_2_REGS_X6_OFFS 48 
+#define ARM_SMCCC_1_2_REGS_X8_OFFS 64 
+#define ARM_SMCCC_1_2_REGS_X10_OFFS 80 
+#define ARM_SMCCC_1_2_REGS_X12_OFFS 96 
+#define ARM_SMCCC_1_2_REGS_X14_OFFS 112 
+#define ARM_SMCCC_1_2_REGS_X16_OFFS 128 
+
+#define HIBERN_PBE_ORIG 8 
+#define HIBERN_PBE_ADDR 0 
+#define HIBERN_PBE_NEXT 16 
+#define ARM64_FTR_SYSVAL 24 
+
+#define TRAMP_VALIAS -10518528 
+#define SDEI_EVENT_INTREGS 0 
+#define SDEI_EVENT_PRIORITY 356 
+#define PTRAUTH_USER_KEY_APIA 0 
+#define PTRAUTH_KERNEL_KEY_APIA 0 
+
+
+
+#endif

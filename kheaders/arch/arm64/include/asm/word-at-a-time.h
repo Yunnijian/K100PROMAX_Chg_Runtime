@@ -1,0 +1,61 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+
+#ifndef __ASM_WORD_AT_A_TIME_H
+#define __ASM_WORD_AT_A_TIME_H
+
+#include <linux/uaccess.h>
+
+#ifndef __AARCH64EB__
+
+#include <linux/bitops.h>
+#include <linux/wordpart.h>
+
+struct word_at_a_time {
+	const unsigned long one_bits, high_bits;
+};
+
+#define WORD_AT_A_TIME_CONSTANTS { REPEAT_BYTE(0x01), REPEAT_BYTE(0x80) }
+
+static inline unsigned long has_zero(unsigned long a, unsigned long *bits,
+				     const struct word_at_a_time *c)
+{
+	unsigned long mask = ((a - c->one_bits) & ~a) & c->high_bits;
+	*bits = mask;
+	return mask;
+}
+
+#define prep_zero_mask(a, bits, c) (bits)
+#define create_zero_mask(bits) (bits)
+#define find_zero(bits) (__ffs(bits) >> 3)
+
+static inline unsigned long zero_bytemask(unsigned long bits)
+{
+	bits = (bits - 1) & ~bits;
+	return bits >> 7;
+}
+
+#else	
+#include <asm-generic/word-at-a-time.h>
+#endif
+
+
+static inline unsigned long load_unaligned_zeropad(const void *addr)
+{
+	unsigned long ret;
+
+	__mte_enable_tco_async();
+
+	
+	asm(
+	"1:	ldr	%0, %2\n"
+	"2:\n"
+	_ASM_EXTABLE_LOAD_UNALIGNED_ZEROPAD(1b, 2b, %0, %1)
+	: "=&r" (ret)
+	: "r" (addr), "Q" (*(unsigned long *)addr));
+
+	__mte_disable_tco_async();
+
+	return ret;
+}
+
+#endif 

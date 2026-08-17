@@ -1,0 +1,397 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _LINUX_FS_NOTIFY_H
+#define _LINUX_FS_NOTIFY_H
+
+
+
+#include <linux/fsnotify_backend.h>
+#include <linux/audit.h>
+#include <linux/slab.h>
+#include <linux/bug.h>
+
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/fsnotify.h>
+
+
+static inline bool fsnotify_sb_has_priority_watchers(struct super_block *sb,
+						     int prio)
+{
+	struct fsnotify_sb_info *sbinfo = fsnotify_sb_info(sb);
+
+	
+	if (!sbinfo)
+		return false;
+
+	return atomic_long_read(&sbinfo->watched_objects[prio]);
+}
+
+
+static inline bool fsnotify_sb_has_watchers(struct super_block *sb)
+{
+	return fsnotify_sb_has_priority_watchers(sb, 0);
+}
+
+
+static inline int fsnotify_name(__u32 mask, const void *data, int data_type,
+				struct inode *dir, const struct qstr *name,
+				u32 cookie)
+{
+	if (!fsnotify_sb_has_watchers(dir->i_sb))
+		return 0;
+
+	return fsnotify(mask, data, data_type, dir, name, NULL, cookie);
+}
+
+static inline void fsnotify_dirent(struct inode *dir, struct dentry *dentry,
+				   __u32 mask)
+{
+	fsnotify_name(mask, dentry, FSNOTIFY_EVENT_DENTRY, dir, &dentry->d_name, 0);
+}
+
+static inline void fsnotify_inode(struct inode *inode, __u32 mask)
+{
+	if (!fsnotify_sb_has_watchers(inode->i_sb))
+		return;
+
+	if (S_ISDIR(inode->i_mode))
+		mask |= FS_ISDIR;
+
+	fsnotify(mask, inode, FSNOTIFY_EVENT_INODE, NULL, NULL, inode, 0);
+}
+
+
+static inline int fsnotify_parent(struct dentry *dentry, __u32 mask,
+				  const void *data, int data_type)
+{
+	struct inode *inode = d_inode(dentry);
+
+	if (!fsnotify_sb_has_watchers(inode->i_sb))
+		return 0;
+
+	if (S_ISDIR(inode->i_mode)) {
+		mask |= FS_ISDIR;
+
+		
+		if (!(dentry->d_flags & DCACHE_FSNOTIFY_PARENT_WATCHED))
+			goto notify_child;
+	}
+
+	
+	if (IS_ROOT(dentry))
+		goto notify_child;
+
+	return __fsnotify_parent(dentry, mask, data, data_type);
+
+notify_child:
+	return fsnotify(mask, data, data_type, NULL, NULL, inode, 0);
+}
+
+
+static inline void fsnotify_dentry(struct dentry *dentry, __u32 mask)
+{
+	fsnotify_parent(dentry, mask, dentry, FSNOTIFY_EVENT_DENTRY);
+}
+
+static inline int fsnotify_file(struct file *file, __u32 mask)
+{
+	const struct path *path;
+
+	
+	if (file->f_mode & (FMODE_NONOTIFY | FMODE_PATH))
+		return 0;
+
+	path = &file->f_path;
+	
+	if (mask & ALL_FSNOTIFY_PERM_EVENTS &&
+	    !fsnotify_sb_has_priority_watchers(path->dentry->d_sb,
+					       FSNOTIFY_PRIO_CONTENT))
+		return 0;
+
+	
+	if (mask & FS_OPEN) {
+		if (path->dentry->d_op &&
+		    path->dentry->d_op->d_canonical_path) {
+			struct path lower_path;
+			int ret;
+
+			ret = path->dentry->d_op->d_canonical_path(path,
+								   &lower_path);
+			if (ret != -ENOSYS) {
+				if (ret)
+					return ret;
+
+				ret = fsnotify_parent(lower_path.dentry, mask,
+						      &lower_path, FSNOTIFY_EVENT_PATH);
+				path_put(&lower_path);
+
+				if (ret)
+					return ret;
+			}
+		}
+	}
+
+	return fsnotify_parent(path->dentry, mask, path, FSNOTIFY_EVENT_PATH);
+}
+
+#ifdef CONFIG_FANOTIFY_ACCESS_PERMISSIONS
+
+static inline int fsnotify_file_area_perm(struct file *file, int perm_mask,
+					  const loff_t *ppos, size_t count)
+{
+	__u32 fsnotify_mask = FS_ACCESS_PERM;
+
+	
+	lockdep_assert_once(file_write_not_started(file));
+
+	if (!(perm_mask & MAY_READ))
+		return 0;
+
+	return fsnotify_file(file, fsnotify_mask);
+}
+
+
+static inline int fsnotify_file_perm(struct file *file, int perm_mask)
+{
+	return fsnotify_file_area_perm(file, perm_mask, NULL, 0);
+}
+
+
+static inline int fsnotify_open_perm(struct file *file)
+{
+	int ret;
+
+	if (file->f_flags & __FMODE_EXEC) {
+		ret = fsnotify_file(file, FS_OPEN_EXEC_PERM);
+		if (ret)
+			return ret;
+	}
+
+	return fsnotify_file(file, FS_OPEN_PERM);
+}
+
+#else
+static inline int fsnotify_file_area_perm(struct file *file, int perm_mask,
+					  const loff_t *ppos, size_t count)
+{
+	return 0;
+}
+
+static inline int fsnotify_file_perm(struct file *file, int perm_mask)
+{
+	return 0;
+}
+
+static inline int fsnotify_open_perm(struct file *file)
+{
+	return 0;
+}
+#endif
+
+
+static inline void fsnotify_link_count(struct inode *inode)
+{
+	fsnotify_inode(inode, FS_ATTRIB);
+}
+
+
+static inline void fsnotify_move(struct inode *old_dir, struct inode *new_dir,
+				 const struct qstr *old_name,
+				 int isdir, struct inode *target,
+				 struct dentry *moved)
+{
+	struct inode *source = moved->d_inode;
+	u32 fs_cookie = fsnotify_get_cookie();
+	__u32 old_dir_mask = FS_MOVED_FROM;
+	__u32 new_dir_mask = FS_MOVED_TO;
+	__u32 rename_mask = FS_RENAME;
+	const struct qstr *new_name = &moved->d_name;
+
+	if (isdir) {
+		old_dir_mask |= FS_ISDIR;
+		new_dir_mask |= FS_ISDIR;
+		rename_mask |= FS_ISDIR;
+	}
+
+	
+	fsnotify_name(rename_mask, moved, FSNOTIFY_EVENT_DENTRY,
+		      old_dir, old_name, 0);
+
+	fsnotify_name(old_dir_mask, source, FSNOTIFY_EVENT_INODE,
+		      old_dir, old_name, fs_cookie);
+	fsnotify_name(new_dir_mask, source, FSNOTIFY_EVENT_INODE,
+		      new_dir, new_name, fs_cookie);
+
+	if (target)
+		fsnotify_link_count(target);
+	fsnotify_inode(source, FS_MOVE_SELF);
+	audit_inode_child(new_dir, moved, AUDIT_TYPE_CHILD_CREATE);
+}
+
+
+static inline void fsnotify_inode_delete(struct inode *inode)
+{
+	__fsnotify_inode_delete(inode);
+}
+
+
+static inline void fsnotify_vfsmount_delete(struct vfsmount *mnt)
+{
+	__fsnotify_vfsmount_delete(mnt);
+}
+
+
+static inline void fsnotify_inoderemove(struct inode *inode)
+{
+	fsnotify_inode(inode, FS_DELETE_SELF);
+	__fsnotify_inode_delete(inode);
+}
+
+
+static inline void fsnotify_create(struct inode *dir, struct dentry *dentry)
+{
+	audit_inode_child(dir, dentry, AUDIT_TYPE_CHILD_CREATE);
+
+	fsnotify_dirent(dir, dentry, FS_CREATE);
+}
+
+
+static inline void fsnotify_link(struct inode *dir, struct inode *inode,
+				 struct dentry *new_dentry)
+{
+	fsnotify_link_count(inode);
+	audit_inode_child(dir, new_dentry, AUDIT_TYPE_CHILD_CREATE);
+
+	fsnotify_name(FS_CREATE, inode, FSNOTIFY_EVENT_INODE,
+		      dir, &new_dentry->d_name, 0);
+}
+
+
+static inline void fsnotify_delete(struct inode *dir, struct inode *inode,
+				   struct dentry *dentry)
+{
+	__u32 mask = FS_DELETE;
+
+	if (S_ISDIR(inode->i_mode))
+		mask |= FS_ISDIR;
+
+	fsnotify_name(mask, inode, FSNOTIFY_EVENT_INODE, dir, &dentry->d_name,
+		      0);
+}
+
+
+static inline void d_delete_notify(struct inode *dir, struct dentry *dentry)
+{
+	struct inode *inode = d_inode(dentry);
+
+	ihold(inode);
+	d_delete(dentry);
+	fsnotify_delete(dir, inode, dentry);
+	iput(inode);
+}
+
+
+static inline void fsnotify_unlink(struct inode *dir, struct dentry *dentry)
+{
+	if (WARN_ON_ONCE(d_is_negative(dentry)))
+		return;
+
+	fsnotify_delete(dir, d_inode(dentry), dentry);
+}
+
+
+static inline void fsnotify_mkdir(struct inode *dir, struct dentry *dentry)
+{
+	audit_inode_child(dir, dentry, AUDIT_TYPE_CHILD_CREATE);
+
+	fsnotify_dirent(dir, dentry, FS_CREATE | FS_ISDIR);
+}
+
+
+static inline void fsnotify_rmdir(struct inode *dir, struct dentry *dentry)
+{
+	if (WARN_ON_ONCE(d_is_negative(dentry)))
+		return;
+
+	fsnotify_delete(dir, d_inode(dentry), dentry);
+}
+
+
+static inline void fsnotify_access(struct file *file)
+{
+	fsnotify_file(file, FS_ACCESS);
+}
+
+
+static inline void fsnotify_modify(struct file *file)
+{
+	fsnotify_file(file, FS_MODIFY);
+}
+
+
+static inline void fsnotify_open(struct file *file)
+{
+	__u32 mask = FS_OPEN;
+
+	if (file->f_flags & __FMODE_EXEC)
+		mask |= FS_OPEN_EXEC;
+
+	trace_android_vh_fsnotify_open(file, &mask);
+	fsnotify_file(file, mask);
+}
+
+
+static inline void fsnotify_close(struct file *file)
+{
+	__u32 mask = (file->f_mode & FMODE_WRITE) ? FS_CLOSE_WRITE :
+						    FS_CLOSE_NOWRITE;
+
+	fsnotify_file(file, mask);
+}
+
+
+static inline void fsnotify_xattr(struct dentry *dentry)
+{
+	fsnotify_dentry(dentry, FS_ATTRIB);
+}
+
+
+static inline void fsnotify_change(struct dentry *dentry, unsigned int ia_valid)
+{
+	__u32 mask = 0;
+
+	if (ia_valid & ATTR_UID)
+		mask |= FS_ATTRIB;
+	if (ia_valid & ATTR_GID)
+		mask |= FS_ATTRIB;
+	if (ia_valid & ATTR_SIZE)
+		mask |= FS_MODIFY;
+
+	
+	if ((ia_valid & (ATTR_ATIME | ATTR_MTIME)) == (ATTR_ATIME | ATTR_MTIME))
+		mask |= FS_ATTRIB;
+	else if (ia_valid & ATTR_ATIME)
+		mask |= FS_ACCESS;
+	else if (ia_valid & ATTR_MTIME)
+		mask |= FS_MODIFY;
+
+	if (ia_valid & ATTR_MODE)
+		mask |= FS_ATTRIB;
+
+	if (mask)
+		fsnotify_dentry(dentry, mask);
+}
+
+static inline int fsnotify_sb_error(struct super_block *sb, struct inode *inode,
+				    int error)
+{
+	struct fs_error_report report = {
+		.error = error,
+		.inode = inode,
+		.sb = sb,
+	};
+
+	return fsnotify(FS_ERROR, &report, FSNOTIFY_EVENT_ERROR,
+			NULL, NULL, NULL, 0);
+}
+
+#endif	

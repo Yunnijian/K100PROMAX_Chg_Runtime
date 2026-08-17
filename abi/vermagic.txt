@@ -1,0 +1,1 @@
+6.12.69-android16-6-maybe-dirty-4k SMP preempt mod_unload modversions aarch64
