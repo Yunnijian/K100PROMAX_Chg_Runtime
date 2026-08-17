@@ -69,7 +69,7 @@ su -c 'cat /sys/module/k100pm_chg_runtime/parameters/{armed,boost,pps,thermal,te
 su -c 'cat /sys/module/k100pm_chg_runtime/parameters/{ichg_hits,cv_hits,curve_hits,pps_hits,thermal_hits,temperature_hits,cutoff_hits}'
 ```
 
-模块配置文件为安装目录下的 `/data/adb/modules/k100pm_chg_runtime/profile.conf`。它使用简单的 `KEY=value` 语法，由 `service.sh` 在加载 KO 前读取：
+模块配置文件为安装目录下的 `/data/adb/modules/k100pm_chg_runtime/profile.conf`，由 `service.sh` 在加载 KO 前读取：
 
 ```sh
 K100PM_ARMED=1
