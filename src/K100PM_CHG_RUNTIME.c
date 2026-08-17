@@ -24,20 +24,27 @@ MODULE_PARM_DESC(armed, "register the K100PM observe-only kretprobe during modul
 MODULE_PARM_DESC(observe, "emit sampled observe records when the kretprobe fires");
 MODULE_PARM_DESC(hits, "kretprobe handler calls since module load");
 
-static int k100pm_chg_observe_handler(struct kretprobe_instance *instance,
-				      struct pt_regs *regs)
+static int k100pm_chg_observe_entry_handler(struct kretprobe_instance *instance,
+						    struct pt_regs *regs)
 {
 	unsigned int next = READ_ONCE(hits) + 1u;
 
 	WRITE_ONCE(hits, next);
 	if (READ_ONCE(observe) && (next <= 16u || (next & 127u) == 0u))
-		pr_info("K100PM_CHG_RUNTIME: ichg call=%u x0=%px x1=%llx x2=%llx x3=%llx\n",
+		pr_info("K100PM_CHG_RUNTIME: ichg entry=%u x0=%px x1=%llx x2=%llx x3=%llx\n",
 			next, (void *)regs->regs[0], regs->regs[1], regs->regs[2], regs->regs[3]);
 	return 0;
 }
 
+static int k100pm_chg_observe_return_handler(struct kretprobe_instance *instance,
+						     struct pt_regs *regs)
+{
+	return 0;
+}
+
 static struct kretprobe k100pm_chg_probe = {
-	.handler = k100pm_chg_observe_handler,
+	.handler = k100pm_chg_observe_return_handler,
+	.entry_handler = k100pm_chg_observe_entry_handler,
 	.maxactive = 32,
 	.kp.symbol_name = K100PM_OBSERVE_SYMBOL,
 };
