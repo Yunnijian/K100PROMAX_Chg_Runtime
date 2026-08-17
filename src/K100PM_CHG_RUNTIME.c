@@ -31,7 +31,7 @@ static int k100pm_chg_observe_handler(struct kretprobe_instance *instance,
 
 	WRITE_ONCE(hits, next);
 	if (READ_ONCE(observe) && (next <= 16u || (next & 127u) == 0u))
-		pr_info("K100PM_CHG_RUNTIME: ichg call=%u x0=%px x1=%lx x2=%lx x3=%lx\n",
+		pr_info("K100PM_CHG_RUNTIME: ichg call=%u x0=%px x1=%llx x2=%llx x3=%llx\n",
 			next, (void *)regs->regs[0], regs->regs[1], regs->regs[2], regs->regs[3]);
 	return 0;
 }

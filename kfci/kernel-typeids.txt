@@ -1,2 +1,4 @@
 __kcfi_typeid_delayed_work_timer_fn=0x4697fdf1
 __kcfi_typeid_seq_read=0xf4e9d97c
+__kcfi_typeid_init_module=0x6fbb3035
+__kcfi_typeid_cleanup_module=0xe5c47d60

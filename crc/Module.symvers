@@ -3,3 +3,5 @@
 0x2a38fe47	register_kretprobe	vmlinux	EXPORT_SYMBOL_GPL
 0x3d5e2716	unregister_kretprobe	vmlinux	EXPORT_SYMBOL_GPL
 0x797f2b3e	module_layout	vmlinux	EXPORT_SYMBOL
+0xd0f4936b	param_ops_bool	vmlinux	EXPORT_SYMBOL
+0xd0f4936b	param_ops_uint	vmlinux	EXPORT_SYMBOL
