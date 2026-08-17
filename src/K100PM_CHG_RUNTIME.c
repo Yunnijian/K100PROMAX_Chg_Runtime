@@ -34,6 +34,7 @@ static unsigned int pps_hits;
 static unsigned int thermal_hits;
 static unsigned int temperature_hits;
 static unsigned int cutoff_hits;
+static unsigned int raw_fg_temperature;
 
 module_param(armed, bool, 0600);
 MODULE_PARM_DESC(armed, "register K100PM charging hooks during module load");
@@ -61,6 +62,9 @@ module_param(pps_hits, uint, 0444);
 module_param(thermal_hits, uint, 0444);
 module_param(temperature_hits, uint, 0444);
 module_param(cutoff_hits, uint, 0444);
+module_param(raw_fg_temperature, uint, 0444);
+MODULE_PARM_DESC(raw_fg_temperature,
+	"last unmodified charging FG temperature in 0.1 degrees C");
 
 struct k100pm_probe_ctx {
 	unsigned long arg0;
@@ -72,8 +76,39 @@ static void k100pm_count(unsigned int *counter)
 	WRITE_ONCE(*counter, READ_ONCE(*counter) + 1u);
 }
 
+/* The vendor table uses 0.1 degrees C for the charging FG temperature. */
+static int k100pm_temperature_band(void)
+{
+	unsigned int temperature = READ_ONCE(raw_fg_temperature);
+
+	if (temperature >= 580)
+		return 2; /* 58 C and above: retain the vendor stop-charge path. */
+	if (temperature >= 550)
+		return 1; /* 55-58 C: 4.14 A / 4.12 V recovery band. */
+	if (temperature >= 480)
+		return 0; /* 48-55 C: retain the expanded high-current band. */
+	return -1;
+}
+
+static u32 k100pm_apply_temperature_current(u32 value)
+{
+	int band = k100pm_temperature_band();
+
+	if (band == 2)
+		return value;
+	if (band == 1 && (value == 0u || value >= 3880u))
+		return 4140u;
+	return value;
+}
+
 static u32 k100pm_map_ichg(u32 value)
 {
+	int band = k100pm_temperature_band();
+
+	if (band == 2)
+		return value;
+	if (band == 1)
+		return k100pm_apply_temperature_current(value);
 	switch (value) {
 	case 12945u:
 		return 14270u;
@@ -91,6 +126,12 @@ static u32 k100pm_map_ichg(u32 value)
 
 static u32 k100pm_map_cv(u32 value)
 {
+	int band = k100pm_temperature_band();
+
+	if (band == 2)
+		return value;
+	if (band == 1 && value >= 4080u)
+		return 4120u;
 	switch (value) {
 	case 4530u:
 		return 4540u;
@@ -107,6 +148,12 @@ static u32 k100pm_map_cv(u32 value)
 
 static u32 k100pm_map_fast_curve(u32 value)
 {
+	int band = k100pm_temperature_band();
+
+	if (band == 2)
+		return value;
+	if (band == 1)
+		return k100pm_apply_temperature_current(value);
 	switch (value) {
 	case 18300u:
 		return 19400u;
@@ -131,6 +178,12 @@ static u32 k100pm_map_fast_curve(u32 value)
 
 static u32 k100pm_map_pps(u32 value)
 {
+	int band = k100pm_temperature_band();
+
+	if (band == 2)
+		return value;
+	if (band == 1)
+		return k100pm_apply_temperature_current(value);
 	switch (value) {
 	case 4500u:
 		return 5000u;
@@ -145,6 +198,33 @@ static u32 k100pm_map_pps(u32 value)
 
 static u32 k100pm_map_thermal(u32 value)
 {
+	int band = k100pm_temperature_band();
+
+	if (band == 2)
+		return value;
+	if (band == 1) {
+		switch (value) {
+		case 0u:
+		case 13500u:
+		case 11000u:
+		case 9000u:
+		case 8000u:
+		case 7000u:
+		case 6000u:
+		case 5000u:
+		case 4000u:
+		case 3500u:
+		case 3000u:
+		case 2500u:
+		case 2000u:
+		case 1500u:
+		case 1000u:
+		case 500u:
+			return 4140u;
+		default:
+			return value;
+		}
+	}
 	switch (value) {
 	case 13500u:
 	case 11000u:
@@ -231,6 +311,9 @@ static int k100pm_div_single_entry(struct kretprobe_instance *instance,
 	u32 old = (u32)regs->regs[2];
 	u32 value = old;
 
+	if (k100pm_temperature_band() == 2)
+		return 0;
+
 	if (READ_ONCE(boost)) {
 		if (value == 4500u)
 			value = 5000u;
@@ -241,6 +324,8 @@ static int k100pm_div_single_entry(struct kretprobe_instance *instance,
 	} else if (READ_ONCE(pps)) {
 		value = k100pm_map_pps(value);
 	}
+	if (READ_ONCE(boost) || READ_ONCE(pps))
+		value = k100pm_apply_temperature_current(value);
 	if (value == old)
 		return 0;
 	regs->regs[2] = value;
@@ -259,6 +344,9 @@ static int k100pm_div_multi_entry(struct kretprobe_instance *instance,
 	u32 old = (u32)regs->regs[2];
 	u32 value = old;
 
+	if (k100pm_temperature_band() == 2)
+		return 0;
+
 	if (READ_ONCE(boost)) {
 		if (value == 4500u)
 			value = 5000u;
@@ -269,6 +357,8 @@ static int k100pm_div_multi_entry(struct kretprobe_instance *instance,
 	} else if (READ_ONCE(pps)) {
 		value = k100pm_map_pps(value);
 	}
+	if (READ_ONCE(boost) || READ_ONCE(pps))
+		value = k100pm_apply_temperature_current(value);
 	if (value == old)
 		return 0;
 	regs->regs[2] = value;
@@ -287,10 +377,15 @@ static int k100pm_curr_max_entry(struct kretprobe_instance *instance,
 	u32 old = (u32)regs->regs[2];
 	u32 value = old;
 
+	if (k100pm_temperature_band() == 2)
+		return 0;
+
 	if (READ_ONCE(boost) && value == 17500u)
 		value = 19400u;
 	else if (READ_ONCE(pps))
 		value = k100pm_map_pps(value);
+	if (READ_ONCE(boost) || READ_ONCE(pps))
+		value = k100pm_apply_temperature_current(value);
 	if (value == old)
 		return 0;
 	regs->regs[2] = value;
@@ -336,10 +431,15 @@ static int k100pm_fg_temp_return(struct kretprobe_instance *instance,
 	struct k100pm_probe_ctx *ctx = (struct k100pm_probe_ctx *)instance->data;
 	int *temperature = (int *)ctx->arg1;
 	unsigned int ceiling = READ_ONCE(temperature_ceiling);
+	int raw;
 
-	if (!READ_ONCE(temperature_spoof) || !temperature || !ceiling)
+	if (!temperature)
 		return 0;
-	if (READ_ONCE(*temperature) <= (int)ceiling)
+	raw = READ_ONCE(*temperature);
+	WRITE_ONCE(raw_fg_temperature, raw);
+	if (!READ_ONCE(temperature_spoof) || !ceiling)
+		return 0;
+	if (raw <= (int)ceiling)
 		return 0;
 	WRITE_ONCE(*temperature, (int)ceiling);
 	k100pm_count(&temperature_hits);
